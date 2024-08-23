@@ -5,8 +5,8 @@ import org.bukkit.entity.Player
 import xyz.xenondevs.invui.inventory.VirtualInventory
 import xyz.xenondevs.invui.inventory.event.ItemPreUpdateEvent
 import xyz.xenondevs.invui.inventory.event.PlayerUpdateReason
-import xyz.xenondevs.nova.tileentity.TileEntity
 import xyz.xenondevs.nova.util.item.novaItem
+import xyz.xenondevs.nova.world.block.tileentity.TileEntity
 
 interface SecurityCardHolder {
 

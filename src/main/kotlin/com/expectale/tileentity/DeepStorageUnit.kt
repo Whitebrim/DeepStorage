@@ -12,6 +12,8 @@ import org.bukkit.entity.Player
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
+import xyz.xenondevs.cbf.Compound
+import xyz.xenondevs.commons.collections.enumSetOf
 import xyz.xenondevs.invui.gui.AbstractScrollGui
 import xyz.xenondevs.invui.gui.Gui
 import xyz.xenondevs.invui.gui.SlotElement
@@ -19,27 +21,17 @@ import xyz.xenondevs.invui.gui.structure.Structure
 import xyz.xenondevs.invui.inventory.VirtualInventory
 import xyz.xenondevs.invui.inventory.event.ItemPreUpdateEvent
 import xyz.xenondevs.invui.inventory.event.PlayerUpdateReason
-import xyz.xenondevs.invui.inventory.event.UpdateReason
 import xyz.xenondevs.invui.item.Item
 import xyz.xenondevs.invui.item.ItemProvider
 import xyz.xenondevs.invui.item.builder.ItemBuilder
 import xyz.xenondevs.invui.item.builder.setDisplayName
 import xyz.xenondevs.invui.item.impl.AbstractItem
+import xyz.xenondevs.invui.item.impl.SimpleItem
 import xyz.xenondevs.invui.window.Window
 import xyz.xenondevs.invui.window.type.context.setTitle
-import xyz.xenondevs.nova.data.config.entry
-import xyz.xenondevs.nova.data.world.block.state.NovaTileEntityState
-import xyz.xenondevs.nova.item.DefaultGuiItems
-import xyz.xenondevs.nova.tileentity.NetworkedTileEntity
-import xyz.xenondevs.nova.tileentity.menu.TileEntityMenuClass
-import xyz.xenondevs.nova.tileentity.network.NetworkConnectionType
-import xyz.xenondevs.nova.tileentity.network.item.holder.NovaItemHolder
-import xyz.xenondevs.nova.tileentity.network.item.inventory.NetworkedInventory
-import xyz.xenondevs.nova.ui.addIngredient
-import xyz.xenondevs.nova.ui.config.side.OpenSideConfigItem
-import xyz.xenondevs.nova.ui.config.side.SideConfigMenu
-import xyz.xenondevs.nova.ui.item.BackItem
-import xyz.xenondevs.nova.ui.item.clickableItem
+import xyz.xenondevs.nova.ui.menu.item.BackItem
+import xyz.xenondevs.nova.ui.menu.sideconfig.OpenSideConfigItem
+import xyz.xenondevs.nova.ui.menu.sideconfig.SideConfigMenu
 import xyz.xenondevs.nova.util.BlockSide
 import xyz.xenondevs.nova.util.VoidingVirtualInventory
 import xyz.xenondevs.nova.util.addToInventoryOrDrop
@@ -48,10 +40,19 @@ import xyz.xenondevs.nova.util.item.ItemUtils
 import xyz.xenondevs.nova.util.item.novaItem
 import xyz.xenondevs.nova.util.playClickSound
 import xyz.xenondevs.nova.util.runTaskLater
+import xyz.xenondevs.nova.world.BlockPos
+import xyz.xenondevs.nova.world.block.state.NovaBlockState
+import xyz.xenondevs.nova.world.block.tileentity.NetworkedTileEntity
+import xyz.xenondevs.nova.world.block.tileentity.menu.TileEntityMenuClass
+import xyz.xenondevs.nova.world.block.tileentity.network.type.NetworkConnectionType
+import xyz.xenondevs.nova.world.block.tileentity.network.type.item.inventory.NetworkedInventory
+import xyz.xenondevs.nova.world.item.DefaultGuiItems
+import java.util.*
 
+private val BLOCKED_SIDES = enumSetOf(BlockSide.FRONT)
 private val PREVENT_INFINITE_STORAGE by DEEP_STORAGE_UNIT.config.entry<Boolean>("prevent-infinite-storage")
 
-class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blockState), StorageCellHolder, SecurityCardHolder {
+class DeepStorageUnit(pos: BlockPos, blockState: NovaBlockState, data: Compound) : NetworkedTileEntity(pos, blockState, data), StorageCellHolder, SecurityCardHolder {
     
     override val cellInventory: VirtualInventory = VirtualInventory(12).apply {
         maxStackSizes = IntArray(12) { 1 }
@@ -65,10 +66,9 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
     private val inputInv = VoidingVirtualInventory(1).apply { setPreUpdateHandler(::handlePreInput) }
     private val inventory = DeepStorageInventory(VirtualInventory(getSize()))
     
-    override val itemHolder = NovaItemHolder(
-        this,
-        uuid to (inventory to NetworkConnectionType.BUFFER)
-    ) { createSideConfig(NetworkConnectionType.BUFFER, BlockSide.FRONT) }
+    private val itemHolder = storedItemHolder(
+        inputInv to NetworkConnectionType.INSERT,
+        blockedSides = BLOCKED_SIDES)
     
     private var sortMode by storedValue("sortMode") { SortMode.HIGHER_AMOUNT }
     
@@ -86,7 +86,7 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
     override fun canInputCard(player: Player): Boolean {
         return player.isOp ||
             player.hasPermission("deep_storage.security.bypass") ||
-            player.uniqueId == ownerUUID
+            player.uniqueId == ownerUuid
     }
     
     fun hasAccess(player: Player): Boolean {
@@ -127,12 +127,12 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
     @TileEntityMenuClass
     inner class DeepStorageUnitMenu: GlobalTileEntityMenu() {
         
-        private val openCellWindow = clickableItem(GuiMaterials.STORAGE_CELL.clientsideProvider) {
+        private val openCellWindow = clickableItem(GuiMaterials.STORAGE_CELL.model.clientsideProvider) {
             it.playClickSound()
             cellWindow.open(it)
         }
         
-        private val openCardWindow = clickableItem(GuiMaterials.SECURITY_CARD.clientsideProvider) {
+        private val openCardWindow = clickableItem(GuiMaterials.SECURITY_CARD.model.clientsideProvider) {
             if (canInputCard(it)) {
                 it.playClickSound()
                 cardWindow.open(it)
@@ -140,7 +140,11 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
         }
         
         private val sideConfigGui = SideConfigMenu(
-            this@DeepStorageUnit, listOf(inventory to "inventory.nova.input"), ::openWindow
+            this@DeepStorageUnit,
+            mapOf(
+                itemHolder.getNetworkedInventory(inventory.uuid) to "inventory.nova.input"
+            ),
+            ::openWindow
         )
         
         private val customScroll = CustomScrollGui().apply { setContent(getDisplay()) }
@@ -153,7 +157,7 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
                 "x x x x x x x x x",
                 "x x x x x x x x x",
                 "x x x x x x x x x")
-            .addIngredient('-', inputInv, DefaultGuiItems.LIGHT_HORIZONTAL_LINE.clientsideProvider)
+            .addIngredient('-', inputInv, DefaultGuiItems.LINE_HORIZONTAL.model.clientsideProvider)
             .addIngredient('d', openCellWindow)
             .addIngredient('s', OpenSideConfigItem(sideConfigGui))
             .addIngredient('u', SortButton())
@@ -170,7 +174,7 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
                 "# # | x x x | # #",
                 "r # 3 - - - 4 # #",)
             .addIngredient('r', BackItem {openWindow(it)})
-            .addIngredient('x', cellInventory, GuiMaterials.STORAGE_CELL_PLACEHOLDER)
+            .addIngredient('x', cellInventory, GuiMaterials.STORAGE_CELL_PLACEHOLDER.model.clientsideProvider)
             .build()
         
         private val cellWindow = Window.single()
@@ -187,7 +191,7 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
                 "b # # # # # # # #")
             .addIngredient('w', WhitelistButton())
             .addIngredient('b', BackItem {openWindow(it)})
-            .addIngredient('x', cardInventory, GuiMaterials.SECURITY_CARD_PLACEHOLDER)
+            .addIngredient('x', cardInventory, GuiMaterials.SECURITY_CARD_PLACEHOLDER.model.clientsideProvider)
             .build()
         
         private val cardWindow = Window.single()
@@ -213,8 +217,8 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
         
         inner class WhitelistButton: AbstractItem() {
             override fun getItemProvider(): ItemProvider {
-                return if (whiteList) GuiMaterials.WHITELIST_ON.clientsideProvider
-                else GuiMaterials.WHITELIST_OFF.clientsideProvider
+                return if (whiteList) GuiMaterials.WHITELIST_ON.model.clientsideProvider
+                else GuiMaterials.WHITELIST_OFF.model.clientsideProvider
             }
             
             override fun handleClick(clickType: ClickType, player: Player, event: InventoryClickEvent) {
@@ -227,8 +231,8 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
         
         inner class SortButton: AbstractItem() {
             override fun getItemProvider(): ItemProvider {
-                return if (sortMode == SortMode.ALPHABETICAL) GuiMaterials.ALPHABETICAL_SORT.clientsideProvider
-                else GuiMaterials.STACK_SORT.clientsideProvider
+                return if (sortMode == SortMode.ALPHABETICAL) GuiMaterials.ALPHABETICAL_SORT.model.clientsideProvider
+                else GuiMaterials.STACK_SORT.model.clientsideProvider
             }
             
             override fun handleClick(clickType: ClickType, player: Player, event: InventoryClickEvent) {
@@ -320,6 +324,8 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
     
     inner class DeepStorageInventory(private val virtualInventory: VirtualInventory) : NetworkedInventory {
         
+        override val uuid: UUID
+            get() = TODO("Not yet implemented")
         override val size: Int
             get() = virtualInventory.size
         
@@ -327,7 +333,27 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
             virtualInventory.resize(getSize())
         }
         
-        override val items: Array<ItemStack?>
+        override fun add(itemStack: ItemStack, amount: Int): Int {
+            TODO("Not yet implemented")
+        }
+        
+        override fun canTake(slot: Int, amount: Int): Boolean {
+            TODO("Not yet implemented")
+        }
+        
+        override fun take(slot: Int, amount: Int) {
+            TODO("Not yet implemented")
+        }
+        
+        override fun isEmpty(): Boolean {
+            TODO("Not yet implemented")
+        }
+        
+        override fun copyContents(destination: Array<ItemStack>) {
+            TODO("Not yet implemented")
+        }
+        
+        /*override val items: Array<ItemStack?>
             get() = virtualInventory.items
         
         override fun setItem(slot: Int, item: ItemStack?): Boolean {
@@ -369,7 +395,7 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
                 removeItem(item, 1)
                 menuContainer.forEachMenu(DeepStorageUnitMenu::updateContent)
             }
-        }
+        }*/
         
         override fun isFull(): Boolean {
             return false
@@ -386,7 +412,7 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
         private fun cleanInventory() {
             resize()
             for (i in 0..< getSize()) {
-                inventory.getItem(i) ?: continue
+                //inventory.getItem(i) ?: continue
                 virtualInventory.setItem(null, i, null)
             }
         }
@@ -452,6 +478,16 @@ class DeepStorageUnit(blockState: NovaTileEntityState) : NetworkedTileEntity(blo
             }
             
             super.handleClick(slotNumber, player, clickType, event)
+        }
+        
+    }
+    
+    internal fun clickableItem(provider: ItemProvider, run: (Player) -> Unit): Item {
+        
+        return object : SimpleItem(provider) {
+            override fun handleClick(clickType: ClickType, player: Player, event: InventoryClickEvent) {
+                if (clickType == ClickType.LEFT) run(player)
+            }
         }
         
     }

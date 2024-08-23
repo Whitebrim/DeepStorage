@@ -8,10 +8,9 @@ import xyz.xenondevs.invui.inventory.event.ItemPostUpdateEvent
 import xyz.xenondevs.invui.inventory.event.ItemPreUpdateEvent
 import xyz.xenondevs.invui.inventory.event.PlayerUpdateReason
 import xyz.xenondevs.invui.inventory.get
-import xyz.xenondevs.nova.tileentity.TileEntity
-import xyz.xenondevs.nova.util.VoidingVirtualInventory
 import xyz.xenondevs.nova.util.addToInventoryOrDrop
 import xyz.xenondevs.nova.util.item.novaItem
+import xyz.xenondevs.nova.world.block.tileentity.TileEntity
 
 interface StorageCellHolder {
     

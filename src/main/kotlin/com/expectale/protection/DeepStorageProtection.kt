@@ -8,7 +8,8 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.nova.api.protection.ProtectionIntegration
 import xyz.xenondevs.nova.api.tileentity.TileEntity
-import xyz.xenondevs.nova.tileentity.TileEntityManager
+import xyz.xenondevs.nova.world.format.WorldDataManager
+import xyz.xenondevs.nova.world.pos
 
 object DeepStorageProtection: ProtectionIntegration {
     
@@ -45,13 +46,13 @@ object DeepStorageProtection: ProtectionIntegration {
     }
     
     private fun getStorageUnit(location: Location): DeepStorageUnit? {
-        val tileEntity = TileEntityManager.getTileEntity(location) ?: return null
+        val tileEntity = WorldDataManager.getTileEntity(location.pos) ?: return null
         if (tileEntity !is DeepStorageUnit) return null
         return tileEntity
     }
     
     private fun isStorageUnit(location: Location): Boolean {
-        val tileEntity = TileEntityManager.getTileEntity(location) ?: return false
+        val tileEntity = WorldDataManager.getTileEntity(location.pos) ?: return false
         return tileEntity is DeepStorageUnit
     }
     

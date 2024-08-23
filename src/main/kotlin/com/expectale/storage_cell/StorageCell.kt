@@ -4,17 +4,16 @@ import com.expectale.DeepStorage
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.format.NamedTextColor
+import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.commons.provider.Provider
-import xyz.xenondevs.nova.data.config.entry
-import xyz.xenondevs.nova.data.serialization.cbf.NamespacedCompound
-import xyz.xenondevs.nova.item.NovaItem
-import xyz.xenondevs.nova.item.behavior.ItemBehavior
-import xyz.xenondevs.nova.item.behavior.ItemBehaviorFactory
-import xyz.xenondevs.nova.item.logic.PacketItemData
+import xyz.xenondevs.nova.serialization.cbf.NamespacedCompound
 import xyz.xenondevs.nova.util.item.novaItem
 import xyz.xenondevs.nova.util.item.retrieveData
 import xyz.xenondevs.nova.util.item.storeData
+import xyz.xenondevs.nova.world.item.NovaItem
+import xyz.xenondevs.nova.world.item.behavior.ItemBehavior
+import xyz.xenondevs.nova.world.item.behavior.ItemBehaviorFactory
 
 interface StorageCell {
     
@@ -110,11 +109,17 @@ interface StorageCell {
             return CellData(capacity, itemAmount, mapData)
         }
         
-        override fun updatePacketItemData(data: NamespacedCompound, itemData: PacketItemData) {
+        override fun modifyClientSideStack(player: Player?, itemStack: ItemStack, data: NamespacedCompound): ItemStack {
             val cellData = getCellData(data)
-            itemData.addLore(byteDisplay(cellData.getStoredBytesAmount(), cellData.capacity))
-            itemData.addLore(typeDisplay(cellData.getStoredItemTypeAmount(), cellData.itemAmount))
+            itemStack.setItemMeta(itemStack.itemMeta.apply {
+                lore(lore() ?: ArrayList<Component?>().apply {
+                    add(byteDisplay(cellData.getStoredBytesAmount(), cellData.capacity))
+                    add(typeDisplay(cellData.getStoredItemTypeAmount(), cellData.itemAmount))
+                })
+            })
+            return itemStack
         }
+
     }
 
 }

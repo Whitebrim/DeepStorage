@@ -4,7 +4,7 @@ import org.bukkit.inventory.ItemStack
 import xyz.xenondevs.invui.item.builder.ItemBuilder
 import xyz.xenondevs.invui.item.builder.addLoreLines
 import xyz.xenondevs.invui.item.builder.setDisplayName
-import xyz.xenondevs.nova.item.NovaItem
+import xyz.xenondevs.nova.world.item.NovaItem
 
 class VirtualStorageCell(
     val cellData: CellData,
@@ -35,8 +35,8 @@ class VirtualStorageCell(
     }
     
     fun toDisplay(): ItemBuilder {
-        val builder = novaItem.createClientsideItemBuilder()
-        builder.setDisplayName(novaItem.name)
+        val builder = novaItem.model.createClientsideItemBuilder()
+        builder.setDisplayName(novaItem.name!!)
         builder.addLoreLines(StorageCell.byteDisplay(cellData.getStoredBytesAmount(), cellData.capacity))
         builder.addLoreLines(StorageCell.typeDisplay(cellData.getStoredItemTypeAmount(), cellData.itemAmount))
         return builder
